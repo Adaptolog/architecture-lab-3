@@ -3,10 +3,11 @@ package ui
 import (
 	"image"
 	"image/color"
+	"image/draw"
 	"testing"
 
 	"golang.org/x/exp/shiny/screen"
-	"golang.org/x/image/draw"
+	"golang.org/x/image/math/f64"
 	"golang.org/x/mobile/event/key"
 	"golang.org/x/mobile/event/lifecycle"
 	"golang.org/x/mobile/event/mouse"
@@ -18,16 +19,53 @@ func (m mockScreen) NewTexture(size image.Point) (screen.Texture, error) {
 	return &mockTexture{}, nil
 }
 
-func (m mockScreen) NewWindow(*screen.NewWindowOptions) (screen.Window, error) { return nil, nil }
-func (m mockScreen) NewBuffer(image.Point) (screen.Buffer, error)              { return nil, nil }
+func (m mockScreen) NewWindow(*screen.NewWindowOptions) (screen.Window, error) {
+	return &mockWindow{}, nil
+}
+
+func (m mockScreen) NewBuffer(image.Point) (screen.Buffer, error) {
+	return nil, nil
+}
 
 type mockTexture struct{}
 
-func (m *mockTexture) Release()                                           {}
-func (m *mockTexture) Size() image.Point                                  { return image.Pt(800, 800) }
-func (m *mockTexture) Bounds() image.Rectangle                            { return image.Rect(0, 0, 800, 800) }
+func (m *mockTexture) Release() {}
+func (m *mockTexture) Size() image.Point {
+	return image.Pt(800, 800)
+}
+func (m *mockTexture) Bounds() image.Rectangle {
+	return image.Rect(0, 0, 800, 800)
+}
 func (m *mockTexture) Upload(image.Point, screen.Buffer, image.Rectangle) {}
 func (m *mockTexture) Fill(rect image.Rectangle, src color.Color, op draw.Op) {}
+
+type mockWindow struct{}
+
+func (m *mockWindow) Release() {}
+
+func (m *mockWindow) NextEvent() interface{} {
+	return nil
+}
+
+func (m *mockWindow) Publish() screen.PublishResult {
+	return screen.PublishResult{}
+}
+
+func (m *mockWindow) Send(event interface{}) {}
+
+func (m *mockWindow) SendFirst(event interface{}) {}
+
+func (m *mockWindow) Upload(dst image.Point, src screen.Buffer, sr image.Rectangle) {}
+
+func (m *mockWindow) Scale(dst image.Rectangle, src screen.Texture, sr image.Rectangle, op draw.Op, opts *screen.DrawOptions) {}
+
+func (m *mockWindow) Copy(dst image.Point, src screen.Texture, sr image.Rectangle, op draw.Op, opts *screen.DrawOptions) {}
+
+func (m *mockWindow) Draw(src2d f64.Aff3, src screen.Texture, sr image.Rectangle, op draw.Op, opts *screen.DrawOptions) {}
+
+func (m *mockWindow) DrawUniform(src2d f64.Aff3, src color.Color, sr image.Rectangle, op draw.Op, opts *screen.DrawOptions) {}
+
+func (m *mockWindow) Fill(rect image.Rectangle, src color.Color, op draw.Op) {}
 
 func TestVisualizer(t *testing.T) {
 	v := Visualizer{
@@ -37,17 +75,20 @@ func TestVisualizer(t *testing.T) {
 		},
 	}
 
-	// Це лише базовий тест, що перевіряє ініціалізацію
-	// Реальну роботу вікна важко тестувати без GUI
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		v.run(mockScreen{})
 	}()
+
+	v.done <- struct{}{}
+	<-done
 }
 
 func TestDetectTerminate(t *testing.T) {
 	tests := []struct {
 		name  string
-		event any
+		event interface{}
 		want  bool
 	}{
 		{
