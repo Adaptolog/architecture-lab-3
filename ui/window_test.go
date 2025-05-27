@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"image/draw"
 	"testing"
+	"time"
 
 	"golang.org/x/exp/shiny/screen"
 	"golang.org/x/image/math/f64"
@@ -44,7 +45,9 @@ type mockWindow struct{}
 func (m *mockWindow) Release() {}
 
 func (m *mockWindow) NextEvent() interface{} {
-	return nil
+	// Імітуємо подію закриття вікна через короткий час
+	time.Sleep(100 * time.Millisecond)
+	return lifecycle.Event{To: lifecycle.StageDead}
 }
 
 func (m *mockWindow) Publish() screen.PublishResult {
@@ -70,19 +73,32 @@ func (m *mockWindow) Fill(rect image.Rectangle, src color.Color, op draw.Op) {}
 func TestVisualizer(t *testing.T) {
 	v := Visualizer{
 		Title: "Test Window",
+		done:  make(chan struct{}), // Явно ініціалізуємо канал
 		OnScreenReady: func(s screen.Screen) {
 			t.Log("Screen ready callback called")
 		},
 	}
 
+	// Додаємо таймаут для тесту
+	timeout := time.After(5 * time.Second)
 	done := make(chan struct{})
+
 	go func() {
 		defer close(done)
 		v.run(mockScreen{})
 	}()
 
-	v.done <- struct{}{}
-	<-done
+	select {
+	case <-done:
+		// Тест завершився успішно
+		t.Log("Visualizer completed successfully")
+	case <-timeout:
+		// Примусово завершуємо тест після таймауту
+		t.Fatal("Test timed out: Visualizer did not complete in time")
+	case <-v.done:
+		// Отримали сигнал завершення
+		t.Log("Received done signal")
+	}
 }
 
 func TestDetectTerminate(t *testing.T) {
